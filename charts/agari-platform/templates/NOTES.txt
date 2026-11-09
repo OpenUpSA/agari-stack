@@ -1,0 +1,44 @@
+{{- $fullname := include "agari-platform.fullname" . -}}
+{{ .Chart.Name }} {{ .Chart.Version }} (app {{ .Chart.AppVersion }}) installed as {{ $fullname }}.
+
+{{ if .Values.ingress.enabled -}}
+API        {{ include "agari-platform.siteUrl" . }}/
+Swagger    {{ include "agari-platform.siteUrl" . }}/docs/
+Admin      {{ include "agari-platform.siteUrl" . }}/admin/
+Health     {{ include "agari-platform.siteUrl" . }}/info/health
+{{- if include "agari-platform.frontendUrl" . }}
+Frontend   {{ include "agari-platform.frontendUrl" . }}   (CORS/CSRF origin)
+{{- end }}
+{{- else -}}
+Ingress is disabled: reach the API with
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ $fullname }} 8000:{{ .Values.service.port }}
+{{- end }}
+
+Components
+  web       gunicorn, {{ .Values.web.replicaCount }} replica(s)
+  worker    {{ .Values.worker.replicaCount }} replica(s) of `manage.py agari_worker`{{ if .Values.worker.queues }} (queues: {{ .Values.worker.queues }}){{ end }}
+  migrate   {{ if .Values.migrations.enabled }}Job {{ $fullname }}-migrate-<revision>: migrate, sync_roles{{ if .Values.bootstrap.adminEmail }}, bootstrap_admin{{ end }}
+            (created with the release; web and worker wait for it){{ else }}disabled{{ end }}
+  database  {{ .Values.config.database.user }}@{{ include "agari-platform.databaseHost" . }}:{{ .Values.config.database.port }}/{{ .Values.config.database.name }}
+  storage   s3://{{ .Values.config.objectStorage.bucket }} on {{ .Values.config.objectStorage.endpoint }}
+  search    {{ .Values.config.elasticsearch.url }} (index {{ .Values.config.elasticsearch.index }})
+
+{{ if .Values.bootstrap.adminEmail -}}
+The migration Job creates or promotes {{ .Values.bootstrap.adminEmail }};
+the password comes from `secret.adminPassword` (AGARI_ADMIN_PASSWORD).
+{{ else -}}
+No administrator is bootstrapped (`bootstrap.adminEmail` is empty). Create one with
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ $fullname }} -- manage.py createsuperuser
+{{- end }}
+
+Settings module in use: {{ .Values.config.djangoSettingsModule }}
+{{- if eq .Values.config.djangoSettingsModule "config.settings.dev" }}
+(DEBUG={{ .Values.config.djangoDebug }}, plain HTTP. Use config.settings.prod behind TLS.)
+{{- end }}
+
+Check the rollout with
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+{{ if .Values.migrations.enabled }}
+Migration logs (the Job is created together with the release):
+  kubectl -n {{ .Release.Namespace }} logs -l app.kubernetes.io/component=migrate --tail=50
+{{- end }}

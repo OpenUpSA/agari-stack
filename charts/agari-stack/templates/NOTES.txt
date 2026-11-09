@@ -1,0 +1,43 @@
+{{- $api := index .Values "agari-platform" -}}
+{{- $spa := index .Values "agari-frontend" -}}
+{{- $port := "" -}}
+{{- if $api.config.externalPort -}}{{- $port = printf ":%v" $api.config.externalPort -}}{{- end -}}
+AGARI stack installed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+{{ if $spa.enabled -}}
+Frontend   http://{{ $spa.ingress.host }}{{ $port }}/
+{{- end }}
+{{ if $api.enabled -}}
+API        http://{{ $api.ingress.host }}{{ $port }}/
+Swagger    http://{{ $api.ingress.host }}{{ $port }}/docs/
+Admin      http://{{ $api.ingress.host }}{{ $port }}/admin/
+Health     http://{{ $api.ingress.host }}{{ $port }}/info/health
+{{- end }}
+{{ if .Values.minio.enabled }}
+MinIO      http://{{ .Values.minio.ingress.host }}{{ if .Values.minio.externalPort | int }}:{{ .Values.minio.externalPort }}{{ end }}/   (console: {{ .Values.minio.consoleIngress.host }})
+{{- end }}
+{{ if .Values.mailpit.enabled }}
+Mailpit    http://{{ .Values.mailpit.ingress.host }}{{ $port }}/   (inbox for every mail the platform sends)
+{{- end }}
+{{ if .Values.elasticsearch.enabled }}{{ if .Values.elasticsearch.ingress.enabled }}
+Elastic    http://{{ .Values.elasticsearch.ingress.host }}{{ $port }}/_cluster/health
+{{- end }}{{ end }}
+
+Those host names have to resolve to the cluster's ingress; on a machine with
+nss-myhostname (or any resolver that follows RFC 6761) `*.localhost` already
+does, otherwise add them to /etc/hosts.
+
+{{ if $api.bootstrap.adminEmail -}}
+Administrator: {{ $api.bootstrap.adminEmail }} (password in the chart's Secret)
+{{- else -}}
+No administrator was configured. Re-run with
+  --set agari-platform.bootstrap.adminEmail=you@example.org
+  --set agari-platform.secret.adminPassword=change-me
+{{- end }}
+
+The migration Job is created together with the release - the web and worker pods
+wait for the schema in an init container - so `helm install --wait` only returns
+once the schema is in place:
+  helm status {{ .Release.Name }} -n {{ .Release.Namespace }}
+  kubectl -n {{ .Release.Namespace }} get pods,jobs
+  kubectl -n {{ .Release.Namespace }} logs -l app.kubernetes.io/component=migrate --tail=50

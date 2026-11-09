@@ -1,0 +1,13 @@
+# Build context for images/Dockerfile.frontend (the agari-frontend checkout).
+# Keeps the 22 MB .git directory and any local artefacts out of the context.
+.git
+.gitignore
+.github
+**/node_modules
+**/dist
+**/.vite
+**/*.log
+tmp
+landing-page
+mock-service
+scripts/design-tokens

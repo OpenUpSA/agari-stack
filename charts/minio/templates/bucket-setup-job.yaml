@@ -1,0 +1,90 @@
+{{- if .Values.bucketSetup.enabled }}
+{{- $fullname := include "minio.fullname" . -}}
+{{- $endpoint := printf "http://%s:%d" $fullname (int .Values.service.port) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $fullname }}-bucket-setup
+  labels:
+    {{- include "minio.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bucket-setup
+  annotations:
+    # Runs after the release's own resources exist and after `helm install
+    # --wait` has seen them become ready, but Helm does wait for the Job before
+    # it reports success, so a bucket that could not be created fails the
+    # upgrade instead of going unnoticed.
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "1"
+    # Deletes the previous hook resource before a new one is created (so an
+    # earlier failed run cannot block a re-install) and the Job itself once it
+    # has succeeded - which is why a completed bucket-setup Job is normally not
+    # visible any more (verify.sh checks the bucket, not the Job).
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.bucketSetup.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "minio.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: bucket-setup
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: "{{ .Values.mcImage.repository }}:{{ .Values.mcImage.tag }}"
+          imagePullPolicy: {{ .Values.mcImage.pullPolicy }}
+          env:
+            - name: MINIO_ENDPOINT
+              value: {{ $endpoint | quote }}
+            - name: MC
+              value: {{ .Values.mcImage.binary | quote }}
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "minio.secretName" . }}
+                  key: {{ include "minio.secretKey.accessKey" . }}
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "minio.secretName" . }}
+                  key: {{ include "minio.secretKey.secretKey" . }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+
+              echo "waiting for minio at ${MINIO_ENDPOINT} (up to {{ .Values.bucketSetup.waitTimeoutSeconds }}s)"
+              deadline=$(( $(date +%s) + {{ .Values.bucketSetup.waitTimeoutSeconds }} ))
+              until "${MC}" alias set agari "${MINIO_ENDPOINT}" "${MINIO_ACCESS_KEY}" "${MINIO_SECRET_KEY}" >/dev/null 2>&1; do
+                if [ "$(date +%s)" -ge "${deadline}" ]; then
+                  echo "minio did not become reachable in time" >&2
+                  exit 1
+                fi
+                sleep 3
+              done
+              echo "minio is reachable"
+
+              echo "ensuring buckets exist"
+              {{- range .Values.buckets }}
+              {{- if kindIs "map" . }}
+              "${MC}" mb --ignore-existing "agari/{{ .name }}"
+              {{- else }}
+              "${MC}" mb --ignore-existing "agari/{{ . }}"
+              {{- end }}
+              {{- end }}
+
+              echo "buckets:"
+              "${MC}" ls agari
+              echo "bucket setup complete"
+          resources:
+            {{- toYaml .Values.bucketSetup.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

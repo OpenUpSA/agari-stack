@@ -1,0 +1,96 @@
+# Values for the AGARI frontend chart.
+#
+# The SPA is a bun + fastify SSR app (agari-frontend/website) that renders
+# server-side and hydrates in the browser; browser API calls go straight to the
+# platform ingress (cross-origin), which is why the platform has to allow this
+# host in CORS_ALLOWED_ORIGINS.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: localhost/agari-frontend
+  tag: local
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+replicaCount: 1
+
+# The app has no runtime configuration other than these two variables (see
+# agari-frontend/website/server.ts):
+#   AGARI_ENV  staging | production - selects the service URL set baked into the
+#              bundle at build time (see images/Dockerfile.frontend)
+#   PORT       port the SSR server listens on
+# Everything else - which API the browser talks to - is compiled in, because the
+# upstream client hardcodes it.
+env:
+  agariEnv: staging
+
+port: 3000
+service:
+  type: ClusterIP
+  port: 80
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/proxy-body-size: "1000m"
+  host: agari.localhost
+  path: /
+  pathType: Prefix
+  tls: []
+  # Extra hosts serving the same SPA (e.g. a second local name).
+  extraHosts: []
+
+# Rollouts of an SSR app can overlap for a moment; keep one release running.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 768Mi
+
+# The SSR server needs a few seconds before it answers; readiness uses HTTP,
+# liveness only checks the socket so a rendering error cannot restart the pod.
+readinessProbe:
+  enabled: true
+  path: /
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 6
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

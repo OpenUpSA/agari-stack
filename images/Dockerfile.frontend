@@ -1,0 +1,86 @@
+# AGARI SPA (agari-frontend/website) image for the local k3d stack.
+#
+# Upstream's website/Dockerfile is used unchanged except for two concessions to a
+# local cluster, both applied to the *build context copy* - the agari-frontend
+# checkout itself is never modified:
+#
+#   1. `src/constants/serviceUrls.ts` hardcodes the four openup.org.za
+#      endpoints. The build arg below rewrites folio + keycloak (the two the
+#      platform replaced) to point at the local API; song/score are left alone
+#      unless their build args are set too, because this stack deliberately does
+#      not run them.
+#   2. `src/services/authService.ts` appends `/realms/agari` to the Keycloak
+#      URL. The platform serves the OIDC surface at the root (single tenant, no
+#      realm), so the prefix is dropped.
+#
+# Everything is driven by build args, so the same file builds "unchanged
+# upstream client" images as well: leave AGARI_API_ORIGIN empty to skip the
+# patch entirely.
+#
+# Build context is the agari-frontend checkout (see ../scripts/images-build.sh):
+#   podman build -f images/Dockerfile.frontend \
+#       --build-arg AGARI_API_ORIGIN=http://api.agari.localhost:8080 \
+#       -t localhost/agari-frontend:local ../../agari-frontend
+
+# Fully qualified: rootless podman refuses to guess the registry for a bare
+# "oven/bun" short name without a TTY.
+ARG BUN_IMAGE=docker.io/oven/bun:1
+
+FROM ${BUN_IMAGE} AS build
+WORKDIR /app
+ENV NODE_ENV=production
+
+ARG AGARI_API_ORIGIN=""
+ARG AGARI_SONG_ORIGIN=""
+ARG AGARI_SCORE_ORIGIN=""
+
+COPY website/package.json website/bun.lockb ./
+RUN bun install
+
+COPY website/ . .
+
+# `bun build` shells out to `npm run generate:version-num`; the bun image has no
+# npm, and the script only wraps bash, so point it at bun instead.
+RUN sed -i 's/npm run/bun run/g' package.json
+
+RUN <<'PATCH' sh -eu
+api="${AGARI_API_ORIGIN:-}"
+song="${AGARI_SONG_ORIGIN:-}"
+score="${AGARI_SCORE_ORIGIN:-}"
+urls=src/constants/serviceUrls.ts
+auth=src/services/authService.ts
+
+replace() {
+  # replace <key> <https://<key>-{staging,ilifu}.openup.org.za> <new origin>
+  sed -i -E "s#\b${1}: 'https://${1}-(staging|ilifu)\.openup\.org\.za'#${1}: '${2}'#g" "$urls"
+}
+
+if [ -n "$api" ]; then
+  replace folio "$api"
+  replace keycloak "$api"
+  sed -i 's#/realms/agari##g' "$auth"
+  grep -q "folio: '$api'" "$urls" || { echo "frontend patch: folio URL not rewritten" >&2; exit 1; }
+  grep -q "keycloak: '$api'" "$urls" || { echo "frontend patch: keycloak URL not rewritten" >&2; exit 1; }
+  grep -q '/realms/agari' "$auth" && { echo "frontend patch: realm prefix still present" >&2; exit 1; }
+fi
+[ -n "$song" ] && replace song "$song"
+[ -n "$score" ] && replace score "$score"
+
+echo "service URLs after patching:"
+grep -nE "^\s+(folio|score|song|keycloak):" "$urls"
+PATCH
+
+RUN bun run build
+
+FROM ${BUN_IMAGE}
+WORKDIR /app
+ENV NODE_ENV=production \
+    PORT=3000
+
+# The upstream image leaves the app root-owned and runs as root; the bun user
+# (uid 1000) owns /home/bun and can write its cache there.
+COPY --from=build --chown=1000:1000 /app /app
+USER 1000:1000
+
+EXPOSE 3000
+CMD ["bun", "run", "serve"]

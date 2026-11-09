@@ -1,0 +1,31 @@
+apiVersion: v2
+name: agari-stack
+description: The AGARI stack for a local cluster - platform, worker, database, object storage, search, mail catcher and SPA
+type: application
+version: 0.1.0
+appVersion: "2.0.0"
+dependencies:
+  - name: postgres
+    version: 0.1.0
+    repository: file://../postgres
+    condition: postgres.enabled
+  - name: minio
+    version: 0.1.0
+    repository: file://../minio
+    condition: minio.enabled
+  - name: elasticsearch
+    version: 0.1.0
+    repository: file://../elasticsearch
+    condition: elasticsearch.enabled
+  - name: mailpit
+    version: 0.1.0
+    repository: file://../mailpit
+    condition: mailpit.enabled
+  - name: agari-platform
+    version: 0.1.0
+    repository: file://../agari-platform
+    condition: agari-platform.enabled
+  - name: agari-frontend
+    version: 0.1.0
+    repository: file://../agari-frontend
+    condition: agari-frontend.enabled

@@ -1,0 +1,13 @@
+apiVersion: v2
+name: postgres
+description: |
+  Single-node PostgreSQL for the local AGARI stack. Deliberately tiny: one
+  Deployment, one PVC, one Service and a Secret. Not for production (no
+  replication, no backups, no pooling).
+type: application
+version: 0.1.0
+appVersion: "17-alpine"
+keywords:
+  - agari
+  - postgres
+  - local-development

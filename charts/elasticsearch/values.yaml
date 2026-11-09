@@ -1,0 +1,86 @@
+# Values for the local single-node Elasticsearch chart.
+#
+# AGARI targets Elasticsearch 7.x (the legacy stack pinned 7.17.15); the search
+# backend uses the 7.x typed-mapping API, so do not bump this to 8.x without
+# checking apps/search/backend.py.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: docker.elastic.co/elasticsearch/elasticsearch
+  tag: "7.17.15"
+  pullPolicy: IfNotPresent
+
+clusterName: agari
+# Heap size. 300m matches the legacy agari-helm chart and is plenty for the
+# sample data set.
+javaOpts: "-Xms300m -Xmx300m"
+
+# Security is intentionally off: this node is only reachable inside the cluster
+# (or through an ingress on localhost).
+security:
+  enabled: false
+
+# Set to false if the host kernel exposes a low vm.max_map_count (< 262144) and
+# you cannot raise it; Elasticsearch will then skip the mmap bootstrap check.
+# See README.md ("vm.max_map_count").
+allowMmap: true
+
+service:
+  type: ClusterIP
+  port: 9200
+
+# Index settings for the indices AGARI creates (apps/search/backend.py uses one
+# index per model, "agari-samples" for isolates). A small post-install Job
+# applies them as a composable index template, and aligns existing indices.
+#
+# Why this exists: a single node cannot allocate a replica, so indices created
+# with the Elasticsearch default (number_of_replicas: 1) would leave the cluster
+# health permanently "yellow". Keep 0 for a single-node cluster; raise it only
+# if you scale the StatefulSet/Deployment beyond one replica.
+indexDefaults:
+  enabled: true
+  # Name of the composable index template that is written to Elasticsearch.
+  template: agari
+  # Index pattern the template applies to.
+  pattern: agari-*
+  numberOfShards: 1
+  numberOfReplicas: 0
+
+# Optional extra ingress so you can poke at the REST API from a browser.
+ingress:
+  enabled: false
+  className: traefik
+  annotations: {}
+  host: elastic.agari.localhost
+  path: /
+  pathType: Prefix
+  tls: []
+
+persistence:
+  enabled: true
+  size: 4Gi
+  accessMode: ReadWriteOnce
+  storageClass: ""
+  keepOnDelete: true
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 768Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  allowPrivilegeEscalation: false
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

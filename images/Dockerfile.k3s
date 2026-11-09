@@ -1,0 +1,25 @@
+# Derived k3s node image used by the local AGARI k3d cluster.
+#
+# It is the stock k3s image with two changes:
+#
+#  1. /bin/k3s is patched so that the cgroup v2 preflight check (which hard
+#     requires a *delegatable* cpuset controller in the cgroup namespace root)
+#     no longer aborts startup. On hosts where cpuset is already delegated
+#     (rootful Docker, CI runners, delegated systemd slices) the stock image
+#     works and this patch is unnecessary.
+#
+#  2. The k3d entrypoint scripts are baked in. k3d normally writes them into
+#     the container as a pre-start hook, but podman's API does not reliably
+#     materialise those writes. Without them the container has no entrypoint
+#     and dies instantly with
+#     "catatonit: failed to exec pid1: No such file or directory".
+#     k3d's copies are byte-identical, so if it does manage to write them they
+#     simply overwrite the baked-in files.
+#
+# build/k3s is produced by scripts/build-k3s-image.sh
+# (rancher/k3s image -> /bin/k3s -> patch-validate-cgroups.py -> build/k3s).
+ARG K3S_IMAGE=docker.io/rancher/k3s:v1.35.5-k3s1
+FROM ${K3S_IMAGE}
+
+COPY --chmod=0755 build/k3s /bin/k3s
+COPY --chmod=0755 images/k3d-fixes/k3d-entrypoint.sh images/k3d-fixes/k3d-entrypoint-cgroupv2.sh images/k3d-fixes/k3d-entrypoint-dns.sh images/k3d-fixes/k3d-entrypoint-mounts.sh /bin/

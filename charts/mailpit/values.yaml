@@ -1,0 +1,73 @@
+# Values for the local Mailpit chart.
+#
+# Mailpit is the stack's mail catcher: it speaks SMTP, accepts every message
+# regardless of recipient, and delivers nothing. Invitations and magic links
+# are then readable at http://mailpit.agari.localhost:8080, which is how a
+# dummy address such as org-owner@nicd.gov.za is testable end to end.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: docker.io/axllent/mailpit
+  tag: "v1.31.4"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  # SMTP - point the platform's EMAIL_PORT here.
+  smtpPort: 1025
+  # Web UI and JSON API.
+  httpPort: 8025
+
+# Oldest messages are dropped once this many are stored. Mailpit keeps its
+# database in memory (/tmp), so messages also disappear with the pod - which is
+# exactly what you want from a catcher; re-request the mail instead.
+maxMessages: 500
+
+# Web UI / API ingress. The path below is what you open in a browser.
+ingress:
+  enabled: true
+  className: traefik
+  annotations: {}
+  host: mailpit.agari.localhost
+  path: /
+  pathType: Prefix
+  tls: []
+
+# Host port the k3d load balancer publishes HTTP on (8080 for the local
+# cluster). Only used to build absolute URLs in the notes.
+externalPort: 8080
+
+extraEnv: []
+  # - name: MP_SMTP_AUTH_ACCEPT_ANY
+  #   value: "true"
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# The image has no USER, so run the process as an unprivileged uid. Mailpit
+# only writes to /tmp (its database), so the root filesystem can stay read-only
+# with a writable emptyDir mounted there - and because nothing is shared with
+# another user, the hardening needs no pod-level fsGroup. (The local cluster
+# rejects spec.podSecurityContext under Helm 4's server-side apply, so the
+# container context is deliberately the only place this is configured.)
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}

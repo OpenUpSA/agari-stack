@@ -1,0 +1,20 @@
+apiVersion: v2
+name: agari-platform
+description: |
+  The AGARI Django platform: gunicorn web pod, background worker pod, a
+  migration/bootstrap hook Job and the Service/Ingress in front of them.
+
+  Configuration follows the application's 12-factor env contract exactly - the
+  names in `templates/_helpers.tpl` are the ones `config/settings/base.py`
+  reads - so a deployment can be reviewed against `docs/deployment.md`.
+type: application
+version: 0.1.0
+appVersion: "2.0.0"
+keywords:
+  - agari
+  - django
+  - api
+  - local-development
+maintainers:
+  - name: AGARI
+    url: https://github.com/AGARI

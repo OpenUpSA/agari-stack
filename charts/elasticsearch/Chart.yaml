@@ -1,0 +1,15 @@
+apiVersion: v2
+name: elasticsearch
+description: |
+  Single-node Elasticsearch for the local AGARI stack. AGARI's search app talks
+  plain HTTP to Elasticsearch and creates/updates the index and mapping itself
+  at runtime, so this chart only has to provide a reachable, healthy node - no
+  index bootstrap Job is required.
+type: application
+version: 0.1.0
+appVersion: "7.17.15"
+keywords:
+  - agari
+  - elasticsearch
+  - search
+  - local-development

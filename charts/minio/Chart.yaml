@@ -1,0 +1,16 @@
+apiVersion: v2
+name: minio
+description: |
+  Single-node MinIO (S3-compatible object storage) for the local AGARI stack,
+  plus a hook Job that creates the bucket AGARI expects (default: agari-data).
+  AGARI requires the bucket to exist before the API starts serving uploads,
+  but it never creates it itself, hence the Job.
+type: application
+version: 0.1.0
+appVersion: "2025.5.24"
+keywords:
+  - agari
+  - minio
+  - s3
+  - object-storage
+  - local-development

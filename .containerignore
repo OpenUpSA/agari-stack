@@ -1,0 +1,11 @@
+# Build context for images/Dockerfile.k3s (context root = agari-stack/).
+# Only build/k3s and images/ are used by the image; everything else is
+# excluded so the context stays small.
+
+charts/
+cluster/
+values/
+docs/
+scripts/
+build/k3s-orig
+*.md

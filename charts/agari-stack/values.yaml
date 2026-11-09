@@ -1,0 +1,138 @@
+# Umbrella values: the *wiring* between the charts.
+#
+# This is the part that matters - hostnames, service discovery, credentials that
+# have to agree across two components, and which of the optional pieces are
+# installed. Anything not mentioned here falls back to the subchart's own
+# defaults (see ../../charts/*/values.yaml).
+#
+# Defaults assume a single-node local cluster that publishes HTTP on port 8080
+# and resolves *.localhost to 127.0.0.1, so `helm install agari
+# charts/agari-stack` works on the k3d cluster as-is. The overlay
+# `../../values/k3d.yaml` is the one the helper scripts install; it adds the
+# bits that are per-release rather than per-stack (bootstrap administrator,
+# debug ingresses). Those defaults are *not* production ready - they use known
+# passwords and plain HTTP; see ../../README.md.
+
+# --- bundled dependencies --------------------------------------------------
+# Set `enabled: false` to use an external database / bucket / search cluster and
+# point `agari-platform.config.*` at it instead.
+postgres:
+  enabled: true
+  fullnameOverride: agari-postgres
+  auth:
+    username: agari
+    database: agari
+    # Keep in sync with agari-platform.secret.databasePassword.
+    password: agari
+  persistence:
+    size: 8Gi
+
+minio:
+  enabled: true
+  fullnameOverride: agari-minio
+  # Keep in sync with agari-platform.secret.objectStorage*Key.
+  auth:
+    accessKey: agari
+    secretKey: agari12345
+  buckets:
+    - agari-data
+  ingress:
+    host: minio.agari.localhost
+  consoleIngress:
+    host: minio-console.agari.localhost
+  persistence:
+    size: 10Gi
+
+elasticsearch:
+  enabled: true
+  fullnameOverride: agari-elasticsearch
+
+# Mail catcher: accepts every message over SMTP and delivers nothing, so
+# invitations and magic links are readable at
+# http://mailpit.agari.localhost:8080 even for addresses that do not exist.
+# Set `enabled: false` (and point config.email below at a real relay) to send
+# through a mail server instead.
+mailpit:
+  enabled: true
+  fullnameOverride: agari-mailpit
+  ingress:
+    host: mailpit.agari.localhost
+
+# --- the API, its worker and its migration Job -----------------------------
+agari-platform:
+  enabled: true
+  fullnameOverride: agari-platform
+  image:
+    repository: localhost/agari-platform
+    tag: local
+  ingress:
+    host: api.agari.localhost
+  config:
+    # The port the cluster's ingress publishes HTTP on. k3d's load balancer is
+    # mapped 8080:80, so every absolute URL that the browser is expected to
+    # follow (presigned download links, magic links, CORS origins) has to
+    # include it.
+    externalPort: 8080
+    # The SPA's origin, and therefore the CORS origin the browser is allowed to
+    # call the API from.
+    frontendUrl: http://agari.localhost:8080
+    database:
+      host: ""          # empty -> the `agari-postgres` Service of this release
+      name: agari
+      user: agari
+    objectStorage:
+      # In-cluster endpoint used by the API itself.
+      endpoint: http://agari-minio:9000
+      # Browser-reachable endpoint used to *sign* presigned URLs: it has to match
+      # the MinIO ingress host and port, or downloads will 403.
+      publicEndpoint: http://minio.agari.localhost:8080
+      bucket: agari-data
+    elasticsearch:
+      url: http://agari-elasticsearch:9200
+    # Mail goes to the bundled Mailpit above rather than to the pod log, so any
+    # address can be used in the UI and the link is clickable from Mailpit.
+    email:
+      backend: django.core.mail.backends.smtp.EmailBackend
+      host: agari-mailpit
+      port: 1025
+      defaultFrom: no-reply@agari.localhost
+      username: ""
+      useTls: false
+      useSsl: false
+  secret:
+    # Keep in sync with the bundled postgres/minio credentials above.
+    databasePassword: agari
+    objectStorageAccessKey: agari
+    objectStorageSecretKey: agari12345
+    # The SPA authenticates with client_credentials as `dms` using a secret that
+    # is hardcoded in its own source (src/services/authService.ts). The platform
+    # has to accept that pair, or the "invite user" flows break. Local/dev only.
+    keycloakClientSecret: ""
+    keycloakClientSecrets:
+      dms: VDyLEjGR3xDQvoQlrHq5AB6OwbW0Refc
+  migrations:
+    enabled: true
+    syncRoles: true
+  # Left empty on purpose here: `secret.adminPassword` plus a `bootstrap.adminEmail`
+  # is what makes the migration Job create the first administrator. Set both in
+  # the values file of the environment, never on the command line
+  # (../../values/k3d.yaml does it for the local cluster).
+  bootstrap:
+    adminEmail: ""
+    adminName: ""
+    adminSurname: ""
+    superuser: true
+    resetPassword: false
+
+# --- the SPA ---------------------------------------------------------------
+agari-frontend:
+  enabled: true
+  fullnameOverride: agari-frontend
+  image:
+    repository: localhost/agari-frontend
+    tag: local
+  ingress:
+    host: agari.localhost
+  env:
+    # staging|production: which baked-in service URL set the SSR server picks.
+    agariEnv: staging

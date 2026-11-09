@@ -1,0 +1,34 @@
+# Values for the local k3d cluster (see ../../README.md).
+#
+# Everything structural - which components run, how they find each other, the
+# host names and the known-password development credentials - is in
+# ../charts/agari-stack/values.yaml. This file only adds what is specific to a
+# throwaway cluster on a laptop: an administrator to log in with and a couple of
+# ingresses that are handy while debugging.
+#
+# Install it with:
+#   helm upgrade --install agari charts/agari-stack -n agari --create-namespace \
+#     -f values/k3d.yaml
+
+agari-platform:
+  secret:
+    # Password of the administrator below. Local scratch cluster, reachable only
+    # from this machine - do not copy this pattern anywhere real.
+    adminPassword: agari-admin
+  bootstrap:
+    # Non-empty adminEmail is what makes the migration Job run `bootstrap_admin`.
+    adminEmail: admin@agari.localhost
+    adminName: AGARI
+    adminSurname: Administrator
+    superuser: true
+    # Re-set the password on every upgrade. Convenient here, wrong anywhere else:
+    # it silently undoes a password change made through the UI or the API.
+    resetPassword: true
+
+elasticsearch:
+  # Off by default (the chart's own default) because it is an unauthenticated
+  # search endpoint. On this cluster it is worth having:
+  #   curl -H 'Host: elastic.agari.localhost' http://127.0.0.1:8080/_cat/indices?v
+  ingress:
+    enabled: true
+    host: elastic.agari.localhost

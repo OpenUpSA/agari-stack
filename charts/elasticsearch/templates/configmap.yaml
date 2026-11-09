@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "elasticsearch.fullname" . }}-config
+  labels:
+    {{- include "elasticsearch.labels" . | nindent 4 }}
+data:
+  elasticsearch.yml: |
+    cluster.name: {{ .Values.clusterName }}
+    node.name: ${HOSTNAME}
+    # A single node that both stores data and can be elected master; with
+    # single-node discovery the default role set is already what we want.
+    discovery.type: single-node
+    network.host: 0.0.0.0
+    http.port: 9200
+    xpack.security.enabled: {{ .Values.security.enabled }}
+    xpack.ml.enabled: false
+    bootstrap.memory_lock: false
+    {{- if not .Values.allowMmap }}
+    node.store.allow_mmap: false
+    {{- end }}

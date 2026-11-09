@@ -1,0 +1,87 @@
+{{- if .Values.indexDefaults.enabled }}
+{{- $fullname := include "elasticsearch.fullname" . }}
+{{- $url := printf "http://%s:%d" $fullname (int .Values.service.port) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $fullname }}-index-template
+  labels:
+    {{- include "elasticsearch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: index-template
+  annotations:
+    # Post-install/upgrade hook: runs once the Deployment is ready, so the
+    # cluster normally already answers (the script retries anyway). It is
+    # deleted on success - check the settings instead of the Job.
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      # Deliberately *not* the service selector labels: the Job pod must not
+      # become an endpoint of the Elasticsearch service.
+      labels:
+        {{- include "elasticsearch.labels" . | nindent 8 }}
+        app.kubernetes.io/component: index-template
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: index-template
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              es="{{ $url }}"
+
+              for attempt in $(seq 1 60); do
+                if curl -fsS --max-time 10 "${es}/_cluster/health?wait_for_status=yellow&timeout=5s" >/dev/null; then
+                  break
+                fi
+                echo "waiting for Elasticsearch (attempt ${attempt}/60)"
+                sleep 2
+              done
+              curl -fsS --max-time 10 "${es}/_cluster/health?wait_for_status=yellow&timeout=5s" >/dev/null
+
+              echo "applying index template '{{ .Values.indexDefaults.template }}'"
+              curl -fsS -X PUT \
+                -H 'Content-Type: application/json' \
+                --data-binary @- \
+                "${es}/_index_template/{{ .Values.indexDefaults.template }}" <<'JSON'
+              {
+                "index_patterns": ["{{ .Values.indexDefaults.pattern }}"],
+                "template": {
+                  "settings": {
+                    "number_of_shards": {{ .Values.indexDefaults.numberOfShards }},
+                    "number_of_replicas": {{ .Values.indexDefaults.numberOfReplicas }}
+                  }
+                }
+              }
+              JSON
+
+              # Indices that already exist keep their settings, so align them too.
+              # A wildcard without matches answers 404 - that is not a failure.
+              status=$(curl -sS -o /dev/null -w '%{http_code}' -X PUT \
+                -H 'Content-Type: application/json' \
+                --data-binary '{"index":{"number_of_replicas":{{ .Values.indexDefaults.numberOfReplicas }}}}' \
+                "${es}/{{ .Values.indexDefaults.pattern }}/_settings")
+              if [ "${status}" = "200" ]; then
+                echo "updated replicas of existing {{ .Values.indexDefaults.pattern }} indices"
+              else
+                echo "no existing {{ .Values.indexDefaults.pattern }} index to update (HTTP ${status})"
+              fi
+
+              curl -fsS --max-time 10 "${es}/_cluster/health?pretty"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+{{- end }}

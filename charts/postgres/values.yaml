@@ -1,0 +1,72 @@
+# Values for the local PostgreSQL chart.
+#
+# Django 6.1 refuses anything older than PostgreSQL 15, so keep the tag at 15+.
+
+nameOverride: ""
+# The umbrella chart pins this to "agari-postgres" so service names are stable
+# and predictable across the stack.
+fullnameOverride: ""
+
+image:
+  repository: postgres
+  tag: "17-alpine"
+  pullPolicy: IfNotPresent
+
+# Credentials. `password` is only used to create the bundled Secret; point
+# `existingSecret` at your own Secret to keep it out of values.
+auth:
+  username: agari
+  database: agari
+  password: agari
+  existingSecret: ""
+  secretKeys:
+    username: username
+    database: database
+    password: password
+
+service:
+  type: ClusterIP
+  port: 5432
+
+persistence:
+  enabled: true
+  size: 8Gi
+  accessMode: ReadWriteOnce
+  # Empty means the cluster default StorageClass (local-path in k3d).
+  storageClass: ""
+  # Keep the PVC when the release is deleted; useful for a dev cluster you
+  # re-create often. Set to false to have `helm uninstall` wipe the database.
+  keepOnDelete: true
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+# postgres:17-alpine ships a `pg_isready` binary, so the probes are cheap and
+# do not need a password.
+probes:
+  readiness:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  liveness:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+
+# The official postgres entrypoint needs to chown PGDATA on first start, so the
+# container intentionally keeps the image's default (root) user.
+podSecurityContext:
+  fsGroup: 999
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

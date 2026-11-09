@@ -1,0 +1,290 @@
+# Default values for the AGARI platform chart.
+#
+# Defaults are tuned for the local k3d stack (`agari-stack/charts/agari-stack`):
+# plain HTTP on *.localhost, the development settings module, one replica each.
+# Every one of them is overridable, and `docs/deployment.md` in agari-platform
+# describes what a production deployment has to change (see README.md).
+
+nameOverride: ""
+# The umbrella chart pins this to "agari-platform" so the Service name - and
+# therefore SITE_URL - is stable.
+fullnameOverride: ""
+
+image:
+  repository: localhost/agari-platform
+  tag: local
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+# Extra environment variables / envFrom sources added to every app container.
+extraEnv: []
+extraEnvFrom: []
+extraVolumes: []
+extraVolumeMounts: []
+
+# ---------------------------------------------------------------------------
+# Web (API) process
+# ---------------------------------------------------------------------------
+web:
+  replicaCount: 1
+  # Override `command` to replace the entrypoint, `args` to replace the gunicorn
+  # flags below.
+  command: []
+  args: []
+  # gunicorn tuning: workers x threads. gthread is the right class for an I/O
+  # bound workload (Postgres, S3, Elasticsearch).
+  workers: 3
+  threads: 4
+  timeout: 120
+  gracefulTimeout: 30
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+  # /info/health is the application's own health endpoint; it is cheap and does
+  # not touch the database.
+  livenessProbe:
+    enabled: true
+    path: /info/health
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    enabled: true
+    path: /info/health
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------------------
+# Background worker (django_tasks_db queue consumer)
+# ---------------------------------------------------------------------------
+worker:
+  replicaCount: 1
+  command: []
+  args: []
+  # Comma separated queues, e.g. "default,submissions". Empty means "every queue
+  # configured in TASKS" (the command's own default).
+  queues: ""
+  # Queues this worker must ignore (submissions, search, ...) - only useful when
+  # you scale out several workers.
+  excludeQueues: ""
+  # Seconds to sleep when the queues are empty.
+  pollIntervalSeconds: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------------------
+# Database migrations
+# ---------------------------------------------------------------------------
+# `migrate`, `sync_roles` and `bootstrap_admin` run in a Job that is created
+# with the rest of the release - deliberately *not* a Helm hook. A post-install
+# hook would only run after `helm install --wait` has seen the Deployments
+# become ready, and the worker cannot become ready before the schema exists:
+# hook and Deployment would wait for each other until the timeout.
+#
+# web and worker therefore start with an init container that waits for
+# `manage.py migrate --check` to succeed, so neither of them serves a request or
+# picks up a task against a half-migrated database.
+migrations:
+  enabled: true
+  backoffLimit: 3
+  activeDeadlineSeconds: 900
+  annotations: {}
+  # Keep the finished Job (and its logs) around for this long. 0 disables the
+  # TTL, which is what you want on Kubernetes < 1.23.
+  ttlSecondsAfterFinished: 86400
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  # Run `sync_roles` (idempotent) after migrating so the RBAC groups always
+  # match the permission registry.
+  syncRoles: true
+  # The Job is created together with the database Deployment, so it can reach a
+  # database that is not accepting connections yet. It waits for the port for at
+  # most this many seconds before giving up.
+  waitForDatabaseSeconds: 300
+  # Gate web/worker start on the schema being migrated, and for how long that
+  # gate may wait (it has to outlast `waitForDatabaseSeconds` plus the
+  # migrations themselves).
+  waitForSchema: true
+  waitForSchemaSeconds: 900
+
+# ---------------------------------------------------------------------------
+# First administrator, created by the migration Job (idempotent)
+# ---------------------------------------------------------------------------
+bootstrap:
+  adminEmail: ""
+  adminName: ""
+  adminSurname: ""
+  # Also grant Django superuser rights (every model in the admin site).
+  superuser: false
+  # Reset the password of an existing account to `secret.adminPassword`. Handy
+  # on a throwaway local cluster; surprising in production.
+  resetPassword: false
+
+# ---------------------------------------------------------------------------
+# Service / ingress
+# ---------------------------------------------------------------------------
+service:
+  type: ClusterIP
+  port: 80
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/proxy-body-size: "1000m"
+  # Primary host; also used to derive SITE_URL / ALLOWED_HOSTS when those are
+  # left empty.
+  host: api.agari.localhost
+  path: /
+  pathType: Prefix
+  tls: []
+  # Additional hosts that are allowed to reach the API.
+  extraHosts: []
+
+# ---------------------------------------------------------------------------
+# Application configuration (non-secret). Rendered into a ConfigMap and
+# consumed with envFrom by every container.
+# ---------------------------------------------------------------------------
+config:
+  # config.settings.dev is DEBUG=True, open docs, no secure cookies: the right
+  # module for a local plain-HTTP stack. Use config.settings.prod for anything
+  # real (and read the notes in README.md about TLS first).
+  djangoSettingsModule: config.settings.dev
+  djangoDebug: true
+  timeZone: UTC
+  logLevel: INFO
+  environment: local
+  apiVersion: "2.0.0"
+  # config.settings.prod defaults this to true; plain HTTP needs it off.
+  secureSslRedirect: false
+  hstsSeconds: 0
+  # Public URLs. Empty means "derive from ingress.host".
+  siteUrl: ""
+  frontendUrl: ""
+  # Port the ingress is published on, when it is not 80/443 - the k3d load
+  # balancer listens on 8080, and generated URLs have to carry the port or the
+  # browser will not come back to them.
+  externalPort: 0
+  # Empty means "ingress.host + ingress.extraHosts"; the API additionally
+  # always allows the pod's own IP so kubelet probes work.
+  allowedHosts: []
+  csrfTrustedOrigins: []
+  corsAllowedOrigins: []
+
+  # --- database ------------------------------------------------------------
+  database:
+    # Empty means "the postgres service of this release" when the bundled
+    # postgres chart is used; set explicitly to point at a managed database.
+    host: ""
+    port: 5432
+    name: agari
+    user: agari
+    connMaxAge: 60
+
+  # --- JWT -----------------------------------------------------------------
+  jwt:
+    # HS256 (shared secret, no files) or RS256/RS384/RS512 (mounted key pair
+    # from `secret.jwtPrivateKey`).
+    signingAlgorithm: HS256
+    accessTokenLifetimeMinutes: 60
+    refreshTokenLifetimeDays: 7
+
+  # --- Keycloak compatible OIDC endpoints ----------------------------------
+  keycloak:
+    compatEnabled: true
+    clientId: dms
+    frontendClientId: agari-frontend
+    trustedClientIds: "dms,agari-frontend"
+
+  # --- object storage ------------------------------------------------------
+  objectStorage:
+    endpoint: ""
+    # The browser reachable endpoint used to sign presigned URLs.
+    publicEndpoint: ""
+    bucket: agari-data
+    region: us-east-1
+    useSsl: false
+
+  # --- search --------------------------------------------------------------
+  elasticsearch:
+    url: ""
+    index: agari-samples
+    username: ""
+    requestTimeout: 30
+
+  # --- email ---------------------------------------------------------------
+  email:
+    defaultFrom: webapps+agaridev@openup.org.za
+    # Prints emails to the pod log. A bare "console" is not a Django mailer
+    # path, so the full dotted path it is; anything else needs a relay.
+    backend: django.core.mail.backends.console.EmailBackend
+    host: ""
+    port: 25
+    username: ""
+    useTls: false
+    useSsl: false
+
+  # --- behaviour switches --------------------------------------------------
+  behaviour:
+    publicDocs: true
+    exposeAdminApi: true
+    allowUserIdHeader: false
+    allowDuplicateIsolateIds: true
+    requireFastaFile: false
+
+  # Escape hatch: arbitrary extra ConfigMap entries.
+  extraConfig: {}
+
+# ---------------------------------------------------------------------------
+# Secrets. Values here feed the chart's Secret unless `existingSecret` is set.
+# ---------------------------------------------------------------------------
+secret:
+  existingSecret: ""
+  # Generated once and kept across upgrades (helm lookup) when empty.
+  djangoSecretKey: ""
+  databasePassword: agari
+  objectStorageAccessKey: agari
+  objectStorageSecretKey: agari12345
+  elasticsearchPassword: ""
+  keycloakClientSecret: ""
+  # Named machine clients, e.g. {dms: dms-secret}. Rendered as JSON into
+  # KEYCLOAK_CLIENT_SECRETS.
+  keycloakClientSecrets: {}
+  sendgridApiKey: ""
+  emailPassword: ""
+  # Password for `bootstrap.adminEmail`.
+  adminPassword: ""
+  # PEM private key, required when config.jwt.signingAlgorithm starts with RS.
+  jwtPrivateKey: ""

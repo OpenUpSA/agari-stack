@@ -1,0 +1,12 @@
+# k3s node binaries: extracted from the official image and patched by
+# scripts/build-k3s-image.sh - ~210 MB each and fully regenerable.
+/build/
+
+# Packaged chart dependencies, rebuilt by `helm dependency update`
+# (scripts/deploy.sh runs it on every deploy).
+*.tgz
+
+# Editors / OS noise
+.DS_Store
+*.swp
+*~

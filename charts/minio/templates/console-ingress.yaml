@@ -1,0 +1,31 @@
+{{- if .Values.consoleIngress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "minio.fullname" . }}-console
+  labels:
+    {{- include "minio.labels" . | nindent 4 }}
+  {{- with .Values.consoleIngress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.consoleIngress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.consoleIngress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.consoleIngress.host | quote }}
+      http:
+        paths:
+          - path: {{ .Values.consoleIngress.path }}
+            pathType: {{ .Values.consoleIngress.pathType }}
+            backend:
+              service:
+                name: {{ include "minio.fullname" . }}
+                port:
+                  number: {{ .Values.service.consolePort }}
+{{- end }}

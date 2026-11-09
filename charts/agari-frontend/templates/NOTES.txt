@@ -1,0 +1,15 @@
+{{ .Chart.Name }} {{ .Chart.Version }} installed as {{ include "agari-frontend.fullname" . }}.
+
+{{ if .Values.ingress.enabled -}}
+Open {{ .Values.ingress.host }} through the cluster's ingress
+{{- with .Values.ingress.tls }} (TLS){{ end }}.
+{{- else -}}
+Ingress is disabled: reach the SPA with
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "agari-frontend.fullname" . }} 3000:{{ .Values.service.port }}
+{{- end }}
+
+The SPA talks to the API straight from the browser, so its origin has to be in
+the platform's CORS_ALLOWED_ORIGINS (see `agari-platform.config.frontendUrl` in
+the umbrella chart). Which API that is, is compiled into the bundle at build
+time - the upstream client hardcodes the service URLs; see
+images/Dockerfile.frontend and AGARI_ENV={{ .Values.env.agariEnv }}.

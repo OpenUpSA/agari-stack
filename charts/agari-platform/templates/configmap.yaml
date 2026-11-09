@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agari-platform.fullname" . }}
+  labels:
+    {{- include "agari-platform.labels" . | nindent 4 }}
+data:
+  {{- include "agari-platform.configMapData" . | nindent 2 }}

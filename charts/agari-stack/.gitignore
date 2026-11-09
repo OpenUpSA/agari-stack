@@ -1,0 +1,4 @@
+# `helm dependency build` unpacks the sibling charts here and pins them in
+# Chart.lock; both are derived from ../*/Chart.yaml and are not committed.
+charts/
+Chart.lock

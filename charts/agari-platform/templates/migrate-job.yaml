@@ -1,0 +1,132 @@
+{{- if .Values.migrations.enabled }}
+{{- $fullname := include "agari-platform.fullname" . -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $fullname }}-migrate-{{ .Release.Revision }}
+  labels:
+    {{- include "agari-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    {{/*
+    A plain resource, not a helm.sh/hook: with `--wait` Helm waits for the
+    Deployments before it runs post-install hooks, and the worker Deployment
+    cannot become ready before this Job has migrated the schema. Creating the
+    Job together with everything else keeps both sides moving.
+
+    The revision in the name is what makes that possible: Job specs are
+    immutable, so a fixed name would make the second upgrade fail. Helm deletes
+    the previous revision's Job, and the TTL below cleans up after rollbacks.
+    */}}
+    {{- with .Values.migrations.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  {{- with .Values.migrations.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ . }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "agari-platform.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "agari-platform.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: {{ include "agari-platform.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+
+              echo "waiting for the database at ${DB_HOST}:${DB_PORT} (up to {{ .Values.migrations.waitForDatabaseSeconds }}s)"
+              deadline=$(( $(date +%s) + {{ .Values.migrations.waitForDatabaseSeconds }} ))
+              until python -c 'import os, socket; socket.create_connection((os.environ["DB_HOST"], int(os.environ["DB_PORT"])), 3)' 2>/dev/null; do
+                if [ "$(date +%s)" -ge "${deadline}" ]; then
+                  echo "database did not become reachable within {{ .Values.migrations.waitForDatabaseSeconds }}s" >&2
+                  exit 1
+                fi
+                sleep 3
+              done
+
+              # The port can be open while PostgreSQL is still finishing initdb,
+              # so the migration itself is retried a few times as well.
+              attempt=0
+              until python manage.py migrate --noinput; do
+                attempt=$((attempt + 1))
+                if [ "${attempt}" -ge 5 ]; then
+                  echo "migrations kept failing" >&2
+                  exit 1
+                fi
+                echo "migrate failed, retrying in 5s"
+                sleep 5
+              done
+              {{- if .Values.migrations.syncRoles }}
+
+              # Idempotent: brings the RBAC groups in line with the registry.
+              python manage.py sync_roles
+              {{- end }}
+              {{- if .Values.bootstrap.adminEmail }}
+
+              # Idempotent: creates or promotes the first administrator, after
+              # sync_roles so the system-admin group already exists.
+              python manage.py bootstrap_admin{{ include "agari-platform.bootstrapArgs" . }}
+              {{- end }}
+
+              echo "migrations complete"
+          envFrom:
+            - configMapRef:
+                name: {{ $fullname }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          env:
+            {{- include "agari-platform.secretEnv" . | nindent 12 }}
+            {{- if .Values.bootstrap.adminEmail }}
+            # Both are read by `manage.py bootstrap_admin`, not by the settings.
+            - name: AGARI_ADMIN_EMAIL
+              value: {{ .Values.bootstrap.adminEmail | quote }}
+            - name: AGARI_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agari-platform.secretName" . }}
+                  key: adminPassword
+                  optional: true
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            {{- include "agari-platform.jwtVolumeMount" . | nindent 12 }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        {{- include "agari-platform.jwtVolume" . | nindent 8 }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}
