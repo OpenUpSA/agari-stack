@@ -33,9 +33,9 @@ service:
 
 # Index settings for the indices AGARI creates (apps/search/backend.py uses one
 # index per model, "agari-samples" for isolates). A small post-install Job
-# applies them as a composable index template, merges the document mapping from
-# `mappingFile` into that template (and into any index that already exists), and
-# aligns existing indices' replica settings.
+# builds a composable index template from `mappingFile` (the full index body as
+# it exists on the server), merges the mappings into any index that already
+# exists, and aligns existing indices' replica settings.
 #
 # Why this exists: a single node cannot allocate a replica, so indices created
 # with the Elasticsearch default (number_of_replicas: 1) would leave the cluster
@@ -47,9 +47,11 @@ indexDefaults:
   template: agari
   # Index pattern the template applies to.
   pattern: agari-*
-  # Document mapping applied to every index matching the pattern. Must match
-  # what apps/search/backend.py isolate_document() writes - see schemas/README.md.
-  mappingFile: configs/agari-samples-mapping.json
+  # Full index body (mappings + settings) applied to every index matching the
+  # pattern, byte-identical to the copy on the server. The Job merges two
+  # environment adaptations into it: shards/replicas from these values, and
+  # `visibility` pinned to keyword for the platform's access filter.
+  mappingFile: configs/agari-index-mapping.json
   numberOfShards: 1
   numberOfReplicas: 0
 

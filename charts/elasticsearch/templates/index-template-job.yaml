@@ -1,6 +1,18 @@
 {{- if .Values.indexDefaults.enabled }}
 {{- $fullname := include "elasticsearch.fullname" . }}
 {{- $url := printf "http://%s:%d" $fullname (int .Values.service.port) }}
+{{- /*
+The mapping file is the full index body (mappings + settings) as it exists on
+the server, kept byte-identical to that copy. Two environment adaptations are
+merged in here rather than editing the file:
+  * number_of_shards / number_of_replicas come from the values below - this
+    cluster has one node, so the file's replicas: 1 would leave health yellow;
+  * `visibility` is pinned to keyword: the platform's access filter runs a
+    terms query on it with values like "semi-private", which a dynamically
+    mapped text field would tokenize into `semi`+`private` and never match.
+*/}}
+{{- $index := .Files.Get .Values.indexDefaults.mappingFile | fromJson }}
+{{- $mappings := mergeOverwrite $index.mappings (dict "properties" (dict "visibility" (dict "type" "keyword"))) }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -52,11 +64,8 @@ spec:
               {
                 "index_patterns": ["{{ .Values.indexDefaults.pattern }}"],
                 "template": {
-                  "settings": {
-                    "number_of_shards": {{ .Values.indexDefaults.numberOfShards }},
-                    "number_of_replicas": {{ .Values.indexDefaults.numberOfReplicas }}
-                  },
-                  "mappings": {{ .Files.Get .Values.indexDefaults.mappingFile | nindent 18 }}
+                  "settings": {{ mergeOverwrite $index.settings (dict "number_of_shards" (int .Values.indexDefaults.numberOfShards) "number_of_replicas" (int .Values.indexDefaults.numberOfReplicas)) | toJson }},
+                  "mappings": {{ $mappings | toJson }}
                 }
               }
               JSON
@@ -84,7 +93,7 @@ spec:
                   -H 'Content-Type: application/json' \
                   --data-binary @- \
                   "${es}/${idx}/_mapping" <<'MAPPING' || echo "  mapping merge failed"
-{{ .Files.Get .Values.indexDefaults.mappingFile | nindent 14 }}
+{{ $mappings | toJson | nindent 14 }}
               MAPPING
               done
 
