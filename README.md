@@ -22,7 +22,7 @@ point at the upstream staging deployment and are simply not exercised.
 | --- | --- | --- | --- |
 | `charts/postgres` | `deploy/agari-postgres` | `docker.io/library/postgres:17-alpine` | platform database (`agari`/`agari`) |
 | `charts/minio` | `deploy/agari-minio`, bucket-setup Job | `docker.io/bitnamilegacy/minio:2025.5.24-debian-12-r5` | S3-compatible storage for uploads; creates the `agari-data` bucket |
-| `charts/elasticsearch` | `deploy/agari-elasticsearch`, index-template Job | `docker.elastic.co/elasticsearch/elasticsearch:7.17.15` | search index (`agari-samples`); the Job pins `number_of_replicas: 0` so a single node reports `green` |
+| `charts/elasticsearch` | `deploy/agari-elasticsearch`, index-template Job | `docker.elastic.co/elasticsearch/elasticsearch:7.17.15` | search index (`agari-samples`); the Job pins `number_of_replicas: 0` so a single node reports `green` and applies the isolate document mapping (`configs/agari-samples-mapping.json`, see `schemas/`) |
 | `charts/mailpit` | `deploy/agari-mailpit` | `docker.io/axllent/mailpit:v1.31.4` | mail catcher (SMTP + web inbox) that collects everything the platform mails — sign-in links, invitations |
 | `charts/agari-platform` | `deploy/agari-platform-web` (gunicorn), `deploy/agari-platform-worker` (`manage.py agari_worker`), Job `agari-platform-migrate-<revision>` | `localhost/agari-platform:local` (built from `../agari-platform`) | the API, the background worker and the migrations/bootstrap |
 | `charts/agari-frontend` | `deploy/agari-frontend` | `localhost/agari-frontend:local` (built from `../agari-frontend`) | the SPA, server-rendered by bun |

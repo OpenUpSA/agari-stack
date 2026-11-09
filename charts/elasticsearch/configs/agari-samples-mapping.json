@@ -1,0 +1,46 @@
+{
+  "dynamic_templates": [
+    {
+      "strings_as_keywords": {
+        "match_mapping_type": "string",
+        "mapping": {
+          "type": "keyword",
+          "ignore_above": 1024
+        }
+      }
+    }
+  ],
+  "properties": {
+    "id": {"type": "keyword"},
+    "isolate_id": {"type": "keyword"},
+    "submission_id": {"type": "keyword"},
+    "object_id": {"type": "keyword"},
+    "tsv_row": {"type": "integer"},
+    "status": {"type": "keyword"},
+    "error": {"type": "object"},
+    "seq_error": {"type": "object"},
+    "created_at": {
+      "type": "date",
+      "format": "strict_date_optional_time||yyyy-MM-dd HH:mm:ss||epoch_millis"
+    },
+    "updated_at": {
+      "type": "date",
+      "format": "strict_date_optional_time||yyyy-MM-dd HH:mm:ss||epoch_millis"
+    },
+    "deleted_at": {
+      "type": "date",
+      "format": "strict_date_optional_time||yyyy-MM-dd HH:mm:ss||epoch_millis"
+    },
+    "project_id": {"type": "keyword"},
+    "project_name": {
+      "type": "text",
+      "fields": {"keyword": {"type": "keyword", "ignore_above": 1024}}
+    },
+    "visibility": {"type": "keyword"},
+    "pathogen_id": {"type": "keyword"},
+    "pathogen_name": {
+      "type": "text",
+      "fields": {"keyword": {"type": "keyword", "ignore_above": 1024}}
+    }
+  }
+}

@@ -55,7 +55,8 @@ spec:
                   "settings": {
                     "number_of_shards": {{ .Values.indexDefaults.numberOfShards }},
                     "number_of_replicas": {{ .Values.indexDefaults.numberOfReplicas }}
-                  }
+                  },
+                  "mappings": {{ .Files.Get .Values.indexDefaults.mappingFile | nindent 18 }}
                 }
               }
               JSON
@@ -71,6 +72,21 @@ spec:
               else
                 echo "no existing {{ .Values.indexDefaults.pattern }} index to update (HTTP ${status})"
               fi
+
+              # Indices created before this template keep the mappings they
+              # were born with, so merge the current ones in as well. PUT
+              # _mapping only ever adds new fields - existing definitions are
+              # never altered - which makes this safe to repeat.
+              for idx in $(curl -fsS --max-time 10 \
+                "${es}/_cat/indices/{{ .Values.indexDefaults.pattern }}?h=index" 2>/dev/null || true); do
+                echo "merging mappings into ${idx}"
+                curl -sS -o /dev/null -w '  HTTP %{http_code}\n' -X PUT \
+                  -H 'Content-Type: application/json' \
+                  --data-binary @- \
+                  "${es}/${idx}/_mapping" <<'MAPPING' || echo "  mapping merge failed"
+{{ .Files.Get .Values.indexDefaults.mappingFile | nindent 14 }}
+              MAPPING
+              done
 
               curl -fsS --max-time 10 "${es}/_cluster/health?pretty"
           resources:
