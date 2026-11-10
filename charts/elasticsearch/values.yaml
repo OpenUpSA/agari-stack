@@ -48,9 +48,11 @@ indexDefaults:
   # Index pattern the template applies to.
   pattern: agari-*
   # Full index body (mappings + settings) applied to every index matching the
-  # pattern, byte-identical to the copy on the server. The Job merges two
-  # environment adaptations into it: shards/replicas from these values, and
-  # `visibility` pinned to keyword for the platform's access filter.
+  # pattern. Derived from the copy on the server but no longer byte-identical:
+  # its dynamic templates were repaired locally so that string fields map as
+  # keyword (see schemas/README.md). The Job merges two environment adaptations
+  # into it: shards/replicas from these values, and `visibility` pinned to
+  # keyword for the platform's access filter.
   mappingFile: configs/agari-index-mapping.json
   numberOfShards: 1
   numberOfReplicas: 0

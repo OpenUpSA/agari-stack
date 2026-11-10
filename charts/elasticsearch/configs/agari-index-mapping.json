@@ -5,7 +5,8 @@
       {
         "ids_as_keywords": {
           "match_mapping_type": "string",
-          "match": "*id|*_id|*Id|*accession*|case_identifier|specimen_collector_sample_id",
+          "match_pattern": "regex",
+          "match": ".*id|.*_id|.*Id|.*accession.*|case_identifier|specimen_collector_sample_id",
           "mapping": {
             "type": "keyword",
             "fields": {
@@ -20,7 +21,8 @@
       {
         "dates_flexible": {
           "match_mapping_type": "string",
-          "match": "*date*|*Date*|*_at|*At",
+          "match_pattern": "regex",
+          "match": ".*_date|date.*|.*_at|.*At",
           "mapping": {
             "type": "date",
             "format": "strict_date_optional_time||epoch_millis||yyyy-MM-dd HH:mm:ss||yyyy-MM-dd'T'HH:mm:ss.SSSSSS||yyyy-MM-dd'T'HH:mm:ss||yyyy-MM-dd||yyyy/MM/dd||dd/MM/yyyy||MM/dd/yyyy||yyyy",
@@ -37,7 +39,8 @@
       {
         "geographic_fields": {
           "match_mapping_type": "string",
-          "match": "geo_loc_*|*country*|*province*|*territory*|*state*|*city*|*location*",
+          "match_pattern": "regex",
+          "match": "geo_loc_.*|.*country.*|.*province.*|.*territory.*|.*state.*|.*city.*|.*location.*",
           "mapping": {
             "type": "keyword",
             "fields": {
@@ -56,7 +59,8 @@
       {
         "numeric_coordinates": {
           "match_mapping_type": "string",
-          "match": "*latitude*|*longitude*|altitude|depth",
+          "match_pattern": "regex",
+          "match": ".*latitude.*|.*longitude.*|altitude|depth",
           "mapping": {
             "type": "float",
             "ignore_malformed": true,
@@ -72,7 +76,8 @@
       {
         "genomic_metrics": {
           "match_mapping_type": "string",
-          "match": "*gc|*_gc|*percentage*|*coverage*|*depth*|median_read_depth",
+          "match_pattern": "regex",
+          "match": ".*gc|.*_gc|.*percentage.*|.*coverage.*|.*depth.*|median_read_depth",
           "mapping": {
             "type": "float",
             "ignore_malformed": true,
@@ -88,7 +93,8 @@
       {
         "genomic_sizes": {
           "match_mapping_type": "string",
-          "match": "n50|*genome_size|*genome_length*|*_bp|*contigs*",
+          "match_pattern": "regex",
+          "match": "n50|.*genome_size|.*genome_length.*|.*_bp|.*contigs.*",
           "mapping": {
             "type": "long",
             "ignore_malformed": true,
@@ -102,9 +108,27 @@
         }
       },
       {
+        "other_numeric_fields": {
+          "match_mapping_type": "string",
+          "match_pattern": "regex",
+          "match": ".*_value.*|.*doses.*|.*_count|.*_score|.*_length|.*_size",
+          "mapping": {
+            "type": "float",
+            "ignore_malformed": true,
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          }
+        }
+      },
+      {
         "age_fields": {
           "match_mapping_type": "string",
-          "match": "*age*|host_age*|subject_age*",
+          "match_pattern": "regex",
+          "match": ".*_age|age",
           "mapping": {
             "type": "integer",
             "ignore_malformed": true,
@@ -123,7 +147,8 @@
       {
         "organism_fields": {
           "match_mapping_type": "string",
-          "match": "organism|*organism*|*scientific_name|strain|*strain*|lineage*|clade*|serotype|serogroup|*_type|wzi",
+          "match_pattern": "regex",
+          "match": "organism|.*organism.*|.*scientific_name|strain|.*strain.*|lineage.*|clade.*|serotype|serogroup|.*_type|wzi",
           "mapping": {
             "type": "keyword",
             "fields": {
@@ -142,7 +167,8 @@
       {
         "resistance_genes": {
           "match_mapping_type": "string",
-          "match": "*gene*|*resistance*|*resistant*|virulence_factor*|plasmids*",
+          "match_pattern": "regex",
+          "match": ".*gene.*|.*resistance.*|.*resistant.*|virulence_factor.*|plasmids.*",
           "mapping": {
             "type": "keyword",
             "fields": {
@@ -157,7 +183,8 @@
       {
         "clinical_fields": {
           "match_mapping_type": "string",
-          "match": "*outcome*|*status*|*health*|*disease*|*symptom*|*condition*|*therapy*|*vaccine*|phenotype|genotype",
+          "match_pattern": "regex",
+          "match": ".*outcome.*|.*status.*|.*health.*|.*disease.*|.*symptom.*|.*condition.*|.*therapy.*|.*vaccine.*|phenotype|genotype",
           "mapping": {
             "type": "keyword",
             "fields": {
@@ -172,7 +199,8 @@
       {
         "specimen_fields": {
           "match_mapping_type": "string",
-          "match": "biospecimen|*specimen*|*material*|body_product|anatomical_*|collection_device",
+          "match_pattern": "regex",
+          "match": "biospecimen|.*specimen.*|.*material.*|body_product|anatomical_.*|collection_device",
           "mapping": {
             "type": "keyword",
             "fields": {
@@ -187,7 +215,8 @@
       {
         "sequencing_fields": {
           "match_mapping_type": "string",
-          "match": "sequencing_*|*instrument*|*method*|*protocol*|assembly_*",
+          "match_pattern": "regex",
+          "match": "sequencing_.*|.*instrument.*|.*method.*|.*protocol.*|assembly_.*",
           "mapping": {
             "type": "keyword",
             "fields": {
@@ -202,7 +231,8 @@
       {
         "enum_fields": {
           "match_mapping_type": "string",
-          "match": "*_unit|*_bin|purpose_of_*|*_by|*_category|*_context",
+          "match_pattern": "regex",
+          "match": ".*_unit|.*_bin|purpose_of_.*|.*_by|.*_category|.*_context",
           "mapping": {
             "type": "keyword"
           }
@@ -211,10 +241,10 @@
       {
         "fasta_files": {
           "match_mapping_type": "string",
-          "match": "fasta_*|*sequence*",
+          "match_pattern": "regex",
+          "match": "fasta_.*|.*sequence.*",
           "mapping": {
             "type": "keyword",
-            "index": false,
             "doc_values": true
           }
         }
@@ -222,14 +252,15 @@
       {
         "long_text_fields": {
           "match_mapping_type": "string",
-          "match": "*history*|*protocol*|*description*|*notes*|other_*",
+          "match_pattern": "regex",
+          "match": ".*history.*|.*protocol.*|.*description.*|.*notes.*|other_.*",
           "mapping": {
-            "type": "text",
-            "analyzer": "standard",
+            "type": "keyword",
+            "ignore_above": 512,
             "fields": {
-              "keyword": {
-                "type": "keyword",
-                "ignore_above": 512
+              "text": {
+                "type": "text",
+                "analyzer": "standard"
               }
             }
           }
@@ -262,11 +293,12 @@
         "catch_all_strings": {
           "match_mapping_type": "string",
           "mapping": {
-            "type": "text",
+            "type": "keyword",
+            "ignore_above": 512,
             "fields": {
-              "keyword": {
-                "type": "keyword",
-                "ignore_above": 512
+              "text": {
+                "type": "text",
+                "analyzer": "standard"
               }
             }
           }

@@ -2,8 +2,9 @@
 {{- $fullname := include "elasticsearch.fullname" . }}
 {{- $url := printf "http://%s:%d" $fullname (int .Values.service.port) }}
 {{- /*
-The mapping file is the full index body (mappings + settings) as it exists on
-the server, kept byte-identical to that copy. Two environment adaptations are
+The mapping file started as the full index body (mappings + settings) as it
+exists on the server; it has since diverged - the dynamic templates were
+repaired locally, see schemas/README.md. Two environment adaptations are
 merged in here rather than editing the file:
   * number_of_shards / number_of_replicas come from the values below - this
     cluster has one node, so the file's replicas: 1 would leave health yellow;

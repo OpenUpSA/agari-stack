@@ -473,6 +473,15 @@ kubectl -n agari logs -f deploy/agari-platform-worker
   (`TypeError: Object of type ObjectApiResponse is not JSON serializable`). The
   search now returns `dict(client.search(...))`, i.e. the parsed body, so the
   renderer gets plain dicts. Indexing (the worker path) was never affected.
+* **The index mapping needed a local repair** - the chart's mapping file came
+  from the server, but its dynamic templates never matched anything (`match`
+  does not support `|` alternation, so every string fell through to the
+  catch-all and was mapped `text`). Aggregating or sorting on a `text` field is
+  a hard error, so the SPA's filter facets and column sorts failed with `503`.
+  See `schemas/README.md` ("Local repair: the dynamic templates"). Note that
+  `scripts/deploy.sh` re-applies the template but **existing indices keep the
+  mapping they were born with** - delete the index and reindex from Postgres
+  after changing the file.
 * Elasticsearch runs as a single node. The index template the chart installs
   (`elasticsearch.indexDefaults`) keeps indices at zero replicas so the cluster
   can report `green`; if you delete the template, new indices go back to one
