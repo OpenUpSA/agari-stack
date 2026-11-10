@@ -466,15 +466,13 @@ kubectl -n agari logs -f deploy/agari-platform-worker
 
 ## Known issues
 
-* **`POST /search/` returns a 500** (*pre-existing upstream bug*, not caused by
-  these charts). `elasticsearch-py` 8.x returns an `ObjectApiResponse`, which the
-  platform's `AgariJSONEncoder` (`apps/core/renderers.py`) cannot serialise:
-  `TypeError: Object of type ObjectApiResponse is not JSON serializable`. It
-  reproduces against upstream's own `deploy/docker/compose.yaml` (Elasticsearch
-  7.17.15 + `elasticsearch==8.18.0`). The fix is one line in
-  `apps/search/backend.py::search()` — return the body instead of the response
-  object, i.e. `return dict(client.search(index=self.index, body=body))`.
-  Indexing (the worker path) is unaffected.
+* ~~**`POST /search/` returns a 500**~~ — **fixed** in
+  `apps/search/backend.py::search()`: `elasticsearch-py` 8.x returns an
+  `ObjectApiResponse`, which the platform's `AgariJSONEncoder`
+  (`apps/core/renderers.py`) could not serialise
+  (`TypeError: Object of type ObjectApiResponse is not JSON serializable`). The
+  search now returns `dict(client.search(...))`, i.e. the parsed body, so the
+  renderer gets plain dicts. Indexing (the worker path) was never affected.
 * Elasticsearch runs as a single node. The index template the chart installs
   (`elasticsearch.indexDefaults`) keeps indices at zero replicas so the cluster
   can report `green`; if you delete the template, new indices go back to one
