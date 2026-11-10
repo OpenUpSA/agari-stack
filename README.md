@@ -106,6 +106,50 @@ curl -s -H 'Host: api.agari.localhost' -H "Authorization: Bearer ${TOKEN}" \
   http://127.0.0.1:8080/projects/
 ```
 
+### Seeding test data (optional)
+
+`scripts/seed.sh` loads a throwaway fixture for testing roles — it is **not**
+part of `deploy.sh`, so nothing on a real deployment ever runs it. It creates,
+idempotently:
+
+* two organisations: **National Institute for Communicable Diseases - RSA**
+  (NICD) and **Kenya Medical Research Institute** (KEMRI), both owned by the
+  same account;
+* one user per role key in the registry — `<role-key>@agari.localhost`, e.g.
+  `agari-org-viewer@agari.localhost` — with `system-admin` and
+  `agari-service-account` granted as global groups and the rest as org/project
+  membership rows;
+* one pathogen + schema per file in `schemas/`, and one **public** project per
+  schema dealt round-robin across the two orgs, each with all three
+  `attr-project-*` members.
+
+```sh
+scripts/seed.sh                 # after scripts/deploy.sh
+scripts/seed.sh --dry-run       # print the two kubectl commands, run nothing
+```
+
+Every seeded user has the password `agari-seed` (override with
+`AGARI_SEED_PASSWORD`) and `accepted_terms=True`, so both the magic-link flow
+and `grant_type=password` work immediately — handy for sweeping through all
+nine roles:
+
+```sh
+for role in system-admin agari-org-owner agari-org-admin agari-org-contributor \
+            agari-org-viewer attr-project-admin attr-project-contributor \
+            attr-project-viewer; do
+  TOKEN=$(curl -s -H 'Host: api.agari.localhost' \
+    -d "grant_type=password&client_id=dms&client_secret=${DMS_SECRET:-VDyLEjGR3xDQvoQlrHq5AB6OwbW0Refc}&username=${role}@agari.localhost&password=agari-seed&scope=openid" \
+    http://127.0.0.1:8080/protocol/openid-connect/token | jq -r .access_token)
+  printf '%-24s %s\n' "${role}" "$(curl -s -H 'Host: api.agari.localhost' \
+    -H "Authorization: Bearer ${TOKEN}" http://127.0.0.1:8080/info/whoami \
+    | jq -c '.roles // .user.roles // empty')"
+done
+```
+
+The command itself is `manage.py seed_dev_data` (agari-platform): it refuses
+to run when `DEBUG` is off unless you pass `--force`, so an accidental
+production run fails loudly.
+
 ### Signing in with a magic link
 
 The SPA has no passwords. `http://agari.localhost:8080/login` asks for an email
