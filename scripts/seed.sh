@@ -64,9 +64,9 @@ kubectl -n "${NAMESPACE}" exec "${POD}" -c "${CONTAINER}" -- "${CMD[@]}"
 say "seeded accounts (password ${AGARI_SEED_PASSWORD:-agari-seed})"
 cat >&2 <<'EOF'
   orgs     National Institute for Communicable Diseases - RSA, Kenya Medical Research Institute
-  users    <role-key>@agari.localhost for every role, e.g. agari-org-viewer@agari.localhost
-           (system-admin, agari-org-owner, agari-org-admin, agari-org-contributor,
-            agari-org-viewer, attr-project-admin, attr-project-contributor,
-            attr-project-viewer, agari-service-account)
+  users    one per org role in each org: nicd-org-owner@agari.localhost,
+           kemri-org-viewer@agari.localhost, ... (4 roles x 2 orgs)
+           plus single accounts: system-admin, agari-service-account,
+           attr-project-admin/contributor/viewer @agari.localhost
   projects one per schema, split across the two orgs
 EOF
