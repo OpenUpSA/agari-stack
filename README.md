@@ -8,6 +8,9 @@ Nothing outside this folder is modified: `../agari-platform` and
 `../agari-frontend` are consumed as they are on disk (the SPA source is patched
 inside the image build context only — see [Frontend](#frontend) below).
 
+The same charts also run staging on the SANBI cluster, using `values/staging.yaml`.
+For how to deploy there, see **[STAGING.md](STAGING.md)**.
+
 Deliberately *not* part of this stack: Song, Score, Maestro, Keycloak, Folio,
 Arranger and Kafka. The platform in `../agari-platform` replaces Folio (object
 storage + submissions) and Keycloak (its own OIDC surface), so those services
