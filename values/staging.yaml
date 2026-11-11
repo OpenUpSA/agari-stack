@@ -1,0 +1,105 @@
+# Staging on the SANBI cluster (k8s-controller.sanbi.ac.za), side by side with
+# the legacy stack in the agari-staging namespace.
+#
+#   helm upgrade --install agari charts/agari-stack -n agari-staging-v2 \
+#     --create-namespace -f values/staging.yaml -f <secrets file> \
+#     --wait --timeout 15m
+#
+# Credentials are NOT in this file: they live in a separate, untracked values
+# file. Mailpit and Elasticsearch deliberately have no ingress: sign-in links
+# land in Mailpit, so a public inbox would let anyone sign in as anyone.
+
+postgres:
+  persistence:
+    storageClass: cinder-csi
+    size: 10Gi
+
+minio:
+  externalPort: 0
+  ingress:
+    className: private
+    host: minio-v2-staging.openup.org.za
+    annotations:
+      traefik.ingress.kubernetes.io/proxy-body-size: null
+      cert-manager.io/cluster-issuer: letsencrypt-agari2
+      nginx.ingress.kubernetes.io/proxy-body-size: "1000m"
+      nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    tls:
+      - hosts: [minio-v2-staging.openup.org.za]
+        secretName: minio-v2-staging-tls-cert
+  consoleIngress:
+    enabled: false
+  persistence:
+    storageClass: cinder-csi
+    size: 20Gi
+
+elasticsearch:
+  ingress:
+    enabled: false
+  persistence:
+    storageClass: cinder-csi
+    size: 10Gi
+
+mailpit:
+  ingress:
+    enabled: false
+
+agari-platform:
+  image:
+    repository: ghcr.io/openupsa/agari-platform
+    tag: "61d388c"
+    pullPolicy: IfNotPresent
+  imagePullSecrets:
+    - name: ghcr-pull
+  ingress:
+    className: private
+    host: api-v2-staging.openup.org.za
+    annotations:
+      traefik.ingress.kubernetes.io/proxy-body-size: null
+      cert-manager.io/cluster-issuer: letsencrypt-agari2
+      nginx.ingress.kubernetes.io/proxy-body-size: "1000m"
+    tls:
+      - hosts: [api-v2-staging.openup.org.za]
+        secretName: api-v2-staging-tls-cert
+  config:
+    djangoSettingsModule: config.settings.prod
+    djangoDebug: false
+    environment: staging
+    # nginx redirects to HTTPS; a Django redirect would also hit kubelet probes.
+    secureSslRedirect: false
+    # HSTS in prod settings includes subdomains and preload: not for staging.
+    hstsSeconds: 0
+    externalPort: 443
+    frontendUrl: https://agari-v2-staging.openup.org.za
+    objectStorage:
+      publicEndpoint: https://minio-v2-staging.openup.org.za
+    email:
+      defaultFrom: webapps+agaridev@openup.org.za
+    behaviour:
+      publicDocs: false
+  bootstrap:
+    # Mail is caught by Mailpit, so this address never receives real mail.
+    adminEmail: admin@agari-v2-staging.openup.org.za
+    adminName: AGARI
+    adminSurname: Administrator
+    superuser: true
+    resetPassword: false
+
+agari-frontend:
+  image:
+    repository: ghcr.io/openupsa/agari-frontend
+    tag: "v2-staging-70035c5"
+    pullPolicy: IfNotPresent
+  imagePullSecrets:
+    - name: ghcr-pull
+  ingress:
+    className: private
+    host: agari-v2-staging.openup.org.za
+    annotations:
+      traefik.ingress.kubernetes.io/proxy-body-size: null
+      cert-manager.io/cluster-issuer: letsencrypt-agari2
+    tls:
+      - hosts: [agari-v2-staging.openup.org.za]
+        secretName: agari-v2-staging-tls-cert
+  env:
+    agariEnv: staging
